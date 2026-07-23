@@ -17,7 +17,12 @@ export async function POST(request: Request) {
   try {
     const authResponse = await fetch(`${STRAPI_API_URL}/api/auth/local`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "bypass-tunnel-reminder": "true",
+        "Bypass-Tunnel-Remainder": "true",
+        "User-Agent": "SmileCareApp",
+      },
       body: JSON.stringify({
         identifier: credentials.identifier,
         password: credentials.password,
@@ -40,7 +45,11 @@ export async function POST(request: Request) {
       profileUrl.searchParams.set("pagination[pageSize]", "1");
 
       const profileResponse = await fetch(profileUrl, {
-        headers: { Authorization: `Bearer ${authData.jwt}` },
+        headers: {
+          Authorization: `Bearer ${authData.jwt}`,
+          "bypass-tunnel-reminder": "true",
+          "Bypass-Tunnel-Remainder": "true",
+        },
         cache: "no-store",
       });
 
@@ -59,7 +68,7 @@ export async function POST(request: Request) {
       // Ignore profile fetch error and fallback to default doctor profile
     }
 
-    // Default profile fallback if not found in Strapi doctor-profiles collection
+    // Default profile fallback
     if (!profile) {
       profile = {
         id: authData.user.id,
