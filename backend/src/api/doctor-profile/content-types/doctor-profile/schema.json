@@ -1,0 +1,29 @@
+{
+  "kind": "collectionType",
+  "collectionName": "doctor_profiles",
+  "info": {
+    "singularName": "doctor-profile",
+    "pluralName": "doctor-profiles",
+    "displayName": "Doctor Profile",
+    "description": "Doctor profile linked to a Strapi user for SmileCare login"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "Role": {
+      "type": "enumeration",
+      "enum": ["doctor", "admin", "staff"],
+      "default": "doctor",
+      "required": true
+    },
+    "fullName": {
+      "type": "string"
+    },
+    "user": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "plugin::users-permissions.user"
+    }
+  }
+}

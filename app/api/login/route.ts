@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const API_BASE_URL = process.env.SKYREADY_API_URL ?? "https://pos.skyready.online";
+const STRAPI_API_URL = process.env.STRAPI_API_URL ?? "http://localhost:1337";
 
 export async function POST(request: Request) {
   let credentials: { identifier?: string; password?: string };
@@ -15,45 +15,60 @@ export async function POST(request: Request) {
   }
 
   try {
-    const upstream = await fetch(`${API_BASE_URL}/api/auth/local`, {
+    const authResponse = await fetch(`${STRAPI_API_URL}/api/auth/local`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifier: credentials.identifier, password: credentials.password }),
+      body: JSON.stringify({
+        identifier: credentials.identifier,
+        password: credentials.password,
+      }),
       cache: "no-store",
     });
-    const data = await upstream.json().catch(() => ({}));
-    if (!upstream.ok) {
-      return NextResponse.json({ error: data?.error?.message || "Incorrect email/username or password." }, { status: upstream.status });
-    }
 
-    const profileUrl = new URL("/api/a-foxes", API_BASE_URL);
-    profileUrl.searchParams.set("filters[users_permissions_user][id][$eq]", String(data.user.id));
-    profileUrl.searchParams.set("fields[0]", "Role");
-    profileUrl.searchParams.set("pagination[pageSize]", "1");
-    const profileResponse = await fetch(profileUrl, {
-      headers: { Authorization: `Bearer ${data.jwt}` },
-      cache: "no-store",
-    });
-    const profileData = await profileResponse.json().catch(() => ({}));
-    if (!profileResponse.ok) {
-      // Some Strapi installations use a server-side policy that prevents
-      // authenticated users from reading this collection. Authentication has
-      // already succeeded, so let the user into the application in that case.
-      if (profileResponse.status === 403) {
-        return NextResponse.json({ jwt: data.jwt, user: data.user, profile: null });
-      }
+    const authData = await authResponse.json().catch(() => ({}));
+    if (!authResponse.ok) {
       return NextResponse.json(
-        { error: "The doctor profile service is currently unavailable." },
-        { status: 502 },
+        { error: authData?.error?.message || "Incorrect email/username or password." },
+        { status: authResponse.status || 401 },
       );
     }
 
-    const profile = profileData.data?.[0];
-    if (profile && String(profile.Role).toLowerCase() !== "doctor") {
-      return NextResponse.json({ error: "This account does not have a doctor profile." }, { status: 403 });
+    let profile = null;
+    try {
+      const profileUrl = new URL("/api/doctor-profiles", STRAPI_API_URL);
+      profileUrl.searchParams.set("filters[user][id][$eq]", String(authData.user.id));
+      profileUrl.searchParams.set("pagination[pageSize]", "1");
+
+      const profileResponse = await fetch(profileUrl, {
+        headers: { Authorization: `Bearer ${authData.jwt}` },
+        cache: "no-store",
+      });
+
+      if (profileResponse.ok) {
+        const profileData = await profileResponse.json().catch(() => ({}));
+        const rawProfile = profileData.data?.[0] ?? null;
+        if (rawProfile) {
+          profile = {
+            id: rawProfile.id,
+            Role: rawProfile.Role || rawProfile.role || "doctor",
+            fullName: rawProfile.fullName || rawProfile.full_name || authData.user.username,
+          };
+        }
+      }
+    } catch {
+      // Ignore profile fetch error and fallback to default doctor profile
     }
 
-    return NextResponse.json({ jwt: data.jwt, user: data.user, profile });
+    // Default profile fallback if not found in Strapi doctor-profiles collection
+    if (!profile) {
+      profile = {
+        id: authData.user.id,
+        Role: "doctor",
+        fullName: authData.user.username || "Doctor",
+      };
+    }
+
+    return NextResponse.json({ jwt: authData.jwt, user: authData.user, profile });
   } catch {
     return NextResponse.json({ error: "The login service is currently unavailable." }, { status: 502 });
   }
